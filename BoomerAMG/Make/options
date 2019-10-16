@@ -1,0 +1,10 @@
+EXE_INC = -I$(OBJECTS_DIR) \
+	  -I$(FOAM_SRC)/Pstream/mpi \
+	  -I$(HYPRE_SRC)/hypre/include -DHAVE_CONFIG_H -DHYPRE_TIMING \
+	  -I$(HYPRE_SRC)
+
+	
+
+LIB_LIBS = -L$(HYPRE_SRC)/hypre/lib -lHYPRE -lm -lstdc++
+
+
