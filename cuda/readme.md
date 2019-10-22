@@ -1,4 +1,4 @@
-Several practices regarding gpu/cuda programming.
+Several practices for gpu/cuda programming.
 
 1. fluidsGL
 
