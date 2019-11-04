@@ -2,6 +2,7 @@
 
 # Set environment variables
 $ HYPRE_SRC = <Hypre-root-path> >> ~/.bashrc
+	
 $ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HYPRE_SRC/hypre/lib >> ~/.bashrc
 
 # compile
