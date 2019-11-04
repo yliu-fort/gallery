@@ -2,7 +2,7 @@
 
 # Set environment variables
 set $HYPRE_SRC in ~/.bashrc
-set export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:&HYPRE_SRC/hypre/lib
+set export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HYPRE_SRC/hypre/lib
 
 # compile
 wclean && wmake
