@@ -5,7 +5,7 @@
 `export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HYPRE_SRC/hypre/lib >> ~/.bashrc`
 
 ### compile  
-wclean && wmake
+`wclean && wmake`
 
 ### add entry into controlDict to link compiled library  
 `libs`  
