@@ -1,17 +1,17 @@
 # Hypre2.0 must be compiled as shared library  
 
 ### Set environment variables  
-	HYPRE_SRC = <Hypre-root-path> >> ~/.bashrc  
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HYPRE_SRC/hypre/lib >> ~/.bashrc
+`HYPRE_SRC = <Hypre-root-path> >> ~/.bashrc`  
+`export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HYPRE_SRC/hypre/lib >> ~/.bashrc`
 
 ### compile  
-	wclean && wmake
+wclean && wmake
 
 ### add entry into controlDict to link compiled library  
-	libs  
-	{  
-		"libBoomerAMG.so"	  
-	}  
+`libs`  
+`{`  
+`	"libBoomerAMG.so"`	  
+`}`  
 
 ###
 ### Copyrights 2019 Yuxuan Liu.  
