@@ -1,0 +1,536 @@
+#version 430
+// Definition
+struct DiscreteLattice{
+    vec4 v[7];
+};
+
+// Output
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+layout(rgba32f, binding = 0) uniform image3D uvwr;
+
+layout(std140, binding = 2) buffer fFieldWrite
+{
+    vec4 _fw[];
+};
+layout(rgba32f, binding = 3) uniform image3D occl;
+layout(rgba32f, binding = 4) uniform image3D vis;
+// Input
+layout(std140, binding = 1) buffer fFieldRead
+{
+    vec4 _fr[];
+};
+layout(binding = 0) uniform sampler3D uvwr_old;
+layout(binding = 1) uniform sampler3D occl_old;
+
+// Visualization
+layout(binding = 12) uniform sampler1D colormap;
+
+// Uniform
+uniform int nstep;
+
+layout (std140, binding = 0) uniform LatticeConstants
+{
+    DiscreteLattice wi;
+    DiscreteLattice cx;
+    DiscreteLattice cy;
+    DiscreteLattice cz;
+    float csSqrInv;
+    float csSqr;
+    float Reg;
+    float u_max;
+    float tau;
+    int NX,NY,NZ,nElem;
+};
+
+// Functions
+float sumL3(DiscreteLattice f)
+{
+    float result=0;
+    for(int i = 0; i < 7; i++)
+    {
+        result += f.v[i].x;
+        result += f.v[i].y;
+        result += f.v[i].z;
+        result += f.v[i].w;
+    }
+    return result;
+}
+
+float sumL3w(DiscreteLattice w, DiscreteLattice f)
+{
+    float result=0;
+    for(int i = 0; i < 7; i++)
+    {
+        vec4 _t = w.v[i]*f.v[i];
+        result += _t.x;
+        result += _t.y;
+        result += _t.z;
+        result += _t.w;
+    }
+    return result;
+}
+
+DiscreteLattice mulL3(DiscreteLattice A, DiscreteLattice B)
+{
+    DiscreteLattice result;
+    for(int i = 0; i < 7; i++)
+    {
+        result.v[i] = A.v[i]*B.v[i];
+    }
+    return result;
+}
+DiscreteLattice mulL3f(DiscreteLattice A, float b)
+{
+    DiscreteLattice result;
+    for(int i = 0; i < 7; i++)
+    {
+        result.v[i] = A.v[i]*b;
+    }
+    return result;
+}
+
+DiscreteLattice plsL3(DiscreteLattice A, DiscreteLattice B)
+{
+    DiscreteLattice result;
+    for(int i = 0; i < 7; i++)
+    {
+        result.v[i] = A.v[i] + B.v[i];
+    }
+    return result;
+}
+
+DiscreteLattice minusL3(DiscreteLattice A, DiscreteLattice B)
+{
+    DiscreteLattice result;
+    for(int i = 0; i < 7; i++)
+    {
+        result.v[i] = A.v[i] - B.v[i];
+    }
+    return result;
+}
+
+// lattice boltzmann method
+//void streaming(inout DiscreteLattice f, inout float r, inout float u, inout float v, inout float w, ivec3 gridPos);
+//DiscreteLattice fetchLattice(inout float r, inout float u, inout float v, inout float w, ivec3 dir, ivec3 gridPos);
+//void fetchLatticev(inout float r, inout float u, inout float v, inout float w, ivec3 dir, ivec3 gridPos);
+DiscreteLattice compute_equilibrium( float rho,  float u,  float v,  float w);
+DiscreteLattice collision( DiscreteLattice f,  DiscreteLattice feq,  float alpha,  float beta);
+
+// entropy constraint
+float compute_g( DiscreteLattice f, DiscreteLattice feq, const float a, const float b);
+float compute_gradg( DiscreteLattice f, DiscreteLattice feq, const float a, const float b);
+float constrain_entropy( DiscreteLattice f, DiscreteLattice feq, const float b, const float aold);
+
+// boundary
+//vec4 setupBoundary(inout float uw,inout float vw,inout float rhow);
+
+ivec3 relocUV(ivec3 v)
+{
+    return ivec3(v.x - ((v.x + NX)/NX - 1)*NX,
+                 v.y - ((v.y + NY)/NY - 1)*NY,
+                 v.z - ((v.z + NZ)/NZ - 1)*NZ);
+}
+
+// set a bi later...
+const int bi[28] = {0,2,1,4,3,6,5,8,7,10,9,12,11,14,13,16,15,18,17,20,19,22,21,24,23,26,25,27};
+void bounce_back(inout DiscreteLattice f)
+{
+
+    DiscreteLattice result;
+    for(int i = 0; i < 28;i++)
+    {
+        (result.v[i/4])[i%4] = (f.v[bi[i]/4])[bi[i]%4];
+    }
+    f = result;
+}
+float one_sided_diff(float x1, float x2, float x3, float sign)
+{
+    return sign*0.5f*(-3.0f*x1+4.0f*x2-x3);
+}
+float central_diff(float x1, float x2)
+{
+    return 0.5f*(x1-x2);
+}
+int ind(ivec3 gridPos)
+{
+    return (gridPos.x + gridPos.y*NX + gridPos.z*NX*NY);
+}
+
+void streaming(inout DiscreteLattice f, inout float r, inout float u, inout float v, inout float w, ivec3 gridPos)
+{
+    // Streaming
+    /*for(int i = 0; i < 7; i++)
+    {
+        f.v[i].x = _fr[ind(relocUV(gridPos - ivec3(cx.v[i].x, cy.v[i].x, cz.v[i].x)))+i*nElem].x;
+        f.v[i].y = _fr[ind(relocUV(gridPos - ivec3(cx.v[i].y, cy.v[i].y, cz.v[i].y)))+i*nElem].y;
+        f.v[i].z = _fr[ind(relocUV(gridPos - ivec3(cx.v[i].z, cy.v[i].z, cz.v[i].z)))+i*nElem].z;
+        if(i == 6) {f.v[i].w = 0;continue;} // L28 is not used
+        f.v[i].w = _fr[ind(relocUV(gridPos - ivec3(cx.v[i].w, cy.v[i].w, cz.v[i].w)))+i*nElem].w;
+    }*/
+    for(int i = 0; i < 7; i++) f.v[i] = _fr[ind(gridPos)+i*nElem];
+
+    vec4 a = texelFetch(uvwr_old, gridPos, 0);
+    u = a.x;
+    v = a.y;
+    w = a.z;
+    r = a.w;
+
+}
+
+DiscreteLattice fetchLattice(inout float r, inout float u, inout float v, inout float w, ivec3 dir, ivec3 gridPos)
+{
+    DiscreteLattice f;
+    /*for(int i = 0; i < 7; i++)
+    {
+        f.v[i]  = _fr[ind(relocUV(gridPos - dir))+i*nElem];
+    }*/
+    for(int i = 0; i < 7; i++){
+        for(int j = 0; j < 4; j++){
+            f.v[i][j] = _fr[ind(relocUV(gridPos - dir + ivec3(cx.v[i][j],cy.v[i][j],cz.v[i][j])))+i*nElem][j];
+        }
+    }
+
+    vec4 a = texelFetch(uvwr_old, relocUV(gridPos - dir), 0);
+    u = a.x;
+    v = a.y;
+    w = a.z;
+    r = a.w;
+
+    return f;
+}
+
+void fetchLatticev(inout float r, inout float u, inout float v, inout float w, ivec3 dir, ivec3 gridPos)
+{
+
+    vec4 a = texelFetch(uvwr_old, relocUV(gridPos - dir), 0);
+    u = a.x;
+    v = a.y;
+    w = a.z;
+    r = a.w;
+}
+
+void corner_stabilizer(inout float t, ivec3 gridPos)
+{
+    int flag=0;
+    // Artificially increase tau
+    if(gridPos.y <3 || gridPos.y >(NY-4))       flag += 1;// Next to Bottom Face
+    if(gridPos.x <3 || gridPos.x >(NX-4))       flag += 1;// Next to Left Face
+    if(gridPos.z <3 || gridPos.z >(NZ-4))       flag += 1;// Next to Front Face
+
+    // Corner
+    if(flag > 2) t = max(0.55f, t);
+
+    // Edge
+    if(flag > 1) t = max(0.505f,t);
+
+}
+
+void main()
+{
+    // get index in global work group i.e x,y position
+    ivec3 gridPos = ivec3(gl_GlobalInvocationID.xyz);
+
+    // Corner stabilizer
+    float tau = tau;
+    corner_stabilizer(tau, gridPos);
+
+    // Streaming
+    DiscreteLattice f;
+    float rho,u,v,w;
+    streaming(f,rho,u,v,w, gridPos);
+
+    // Fetch boundary info
+    vec4 boundary = texelFetch(occl_old, gridPos, 0);
+    float alpha = 2.0f*boundary.z; // will move to a new attachment later
+    //boundary = setupBoundary(u,v,rho); // if dynamic
+
+    // no-slip boundary
+    //float occlusion = boundary.w;
+    //float robin_constant = boundary.x;
+    if(boundary.w > 0.0f) // boundary node
+    {
+        // Initial equilibrium relaxation
+        float scale= min(1.0f, float(nstep)/max(256,max(NZ,max(NX,NY))));
+
+        // Dirchlet
+        if(boundary.x > 0.0f)
+        {
+            DiscreteLattice cidotu =
+                    plsL3(
+                        plsL3(
+                            mulL3f(mulL3f(cx,u),scale),
+                            mulL3f(mulL3f(cy,v),scale)),
+                        mulL3f(mulL3f(cz,w),scale));
+            f = minusL3(f, mulL3(mulL3f(cidotu,2.0f*1.0f*csSqrInv), wi));
+
+            bounce_back(f);
+        }
+        // Neumann
+        if(boundary.x == 0.0f)
+        {
+
+            // interior node
+            DiscreteLattice fi;
+            float rhoi,ui,vi,wi;
+
+            // Here is the tricky part: using outlet boundary at top & bottom may lead to reverse flow
+            // which will cause instabilities. using value@ivec2(0,2) improves stability.
+            ivec3 offset = ivec3(0,0,0);
+            if(gridPos.y >(NY-2))  offset = ivec3( 0, 1, 0); // Top
+            if(gridPos.y <1)       offset = ivec3( 0,-1, 0); // Bottom
+            if(gridPos.x <1)       offset = ivec3(-1, 0, 0);// Left
+            if(gridPos.x >(NX-2))  offset = ivec3( 1, 0, 0); // Right
+            fi = fetchLattice(rhoi,ui,vi,wi,offset,gridPos); // Right*/
+
+            // Improved stability when reverse flow may appear
+            //if(gridPos.y <1)       {vi = min(0.0, vi); }// Bottom
+            //if(gridPos.y >(NY-2))  {vi = max(0.0, vi); } // Top
+            //if(gridPos.x <1)       {ui = min(0.0, ui); }// Left
+            //if(gridPos.x >(NX-2))  {ui = max(0.0, ui); } // Right
+
+            // RBC
+            //f = compute_equilibrium(rhoi, ui ,vi, wi);
+
+            // CBC(2D)
+            mat3 X = mat3(u,rho,0,csSqr/rho,u,0,0,0,u);
+            mat3 Y = mat3(v,0,rho,0,v,0,csSqr/rho,0,v);
+
+            float cs = sqrt(csSqr);
+            float P1 = 0.5f*csSqrInv;
+            float P2 = 0.5f/rho/cs;
+            //mat3 Pxinv= mat3(P1,0,P1,
+            //                 -P2,0,P2,
+            //                 0,1,0);
+
+            // interior* node
+            float rhoi_1,ui_1,vi_1,wi_1;
+            fetchLatticev(rhoi_1,ui_1,vi_1,wi_1,ivec3(2,0,0),gridPos);
+
+            // y+ node
+            float rho_yp,u_yp,v_yp,w_yp;
+            fetchLatticev(rho_yp,u_yp,v_yp,w_yp,ivec3(0,-1,0),gridPos);
+            // y- node
+            float rho_ym,u_ym,v_ym,w_ym;
+            fetchLatticev(rho_ym,u_ym,v_ym,w_ym,ivec3(0,1,0),gridPos);
+
+            // gradients
+            float drdx = one_sided_diff(rho, rhoi, rhoi_1, -1.0f);
+            float dudx = one_sided_diff(u, ui, ui_1, -1.0f);
+            float dvdx = one_sided_diff(v, vi, vi_1, -1.0f);
+            float drdy = central_diff(rho_yp, rho_ym);
+            float dudy = central_diff(u_yp,u_ym);
+            float dvdy = central_diff(v_yp,v_ym);
+
+            // for right outlet, L1 = 0
+            vec3 Lx = vec3((u - cs)*(csSqr*drdx - cs*rho*dudx),u*dvdx,(u + cs)*(csSqr*drdx + cs*rho*dudx));
+            Lx.x = 0.0;
+
+            // construct vectors
+            vec3 m = vec3(rho,u,v);
+
+            // Apply CBC
+            float gamma = 0.0f;
+            m.x += -( P1*Lx.x+P1*Lx.z) - gamma*(v*drdy + rho*dvdy);
+            m.y += -(-P2*Lx.x+P2*Lx.z) - gamma*(v*dudy);
+            m.z += -(Lx.y)             - gamma*(csSqr/rho*drdy + v*dvdy);
+
+            rho = m.x;
+            u = m.y;
+            v = m.z;
+            //w = wi;
+
+            f = compute_equilibrium(rho,u*scale,v*scale, w*scale);
+
+        }
+    }
+    else // interior node -> collision
+    {
+        // Compute rho, u and v
+        rho = sumL3(f);
+        u = sumL3w(cx, f)/rho;
+        v = sumL3w(cy, f)/rho;
+        w = sumL3w(cz, f)/rho;
+
+        // External force
+        //float Fx = 8f*csSqr*(tau-0.5f)*u_max/pow(float(NY-2), 2f);
+        /*float Fx = 0;
+        float Fy = 0;
+
+        Fx = weightedSumDiscreteLattice(mulDiscreteLattice(wi, cx)*Fx*csSqrInv, cx);
+        Fy = weightedSumDiscreteLattice(mulDiscreteLattice(wi, cy)*Fy*csSqrInv, cy);
+
+        u += 0.5f*Fx/rho;
+        v += 0.5f*Fy/rho;
+
+        float ueq = u + (tau-0.5f)*Fx/rho;
+        float veq = v + (tau-0.5f)*Fy/rho;*/
+
+        //float ueq = u, veq = v, weq = w;
+
+        // Compute equilibrium
+        DiscreteLattice feq = compute_equilibrium(rho, u, v, w);
+
+        // Entropic Correction
+        float beta = 0.5f/(tau);
+        alpha = constrain_entropy(f, feq, beta, alpha);
+
+        // Collision
+        f = collision(f, feq, alpha, beta);
+
+        // Alpha relaxation if needed
+        boundary.z = min(1.0f,0.5f*alpha+0.005f); // update alpha value with relaxation as initial guess for next time step
+    }
+
+    // Output
+    imageStore(uvwr, gridPos, vec4(u,v,w,rho));
+    imageStore(occl, gridPos, boundary);
+    for(int i = 0; i < 7; i++){
+        for(int j = 0; j < 4; j++){
+            _fw[ind(relocUV(gridPos + ivec3(cx.v[i][j],cy.v[i][j],cz.v[i][j])))+i*nElem][j] = f.v[i][j];
+        }
+    }
+
+    // Post-processing
+    vec3 color;
+    float isoSurf;
+    color = texture(colormap, sqrt((u)*(u)+v*v+w*w)/u_max).xyz;
+
+    isoSurf = boundary.w;
+    //isoSurf = sqrt(u*u+v*v+w*w)/u_max;
+    imageStore(vis, gridPos, vec4(color, isoSurf));
+
+    // if dynamic boundaries, setup new boundary
+    //vec4 dynbc = setupBoundary(u,v,w,rho);
+
+}
+
+DiscreteLattice compute_equilibrium(float rho, float u, float v, float w)
+{
+    DiscreteLattice workMatrix;
+    for(int i = 0; i < 7; i++)
+    {
+        vec4 cidotu = cx.v[i]*u + cy.v[i]*v + cz.v[i]*w;
+        workMatrix.v[i] = wi.v[i]*rho*(1.0f+3.0f*cidotu+4.5f*cidotu*cidotu-1.5f*(u*u+v*v+w*w));
+    }
+
+    return workMatrix;
+}
+
+DiscreteLattice collision(DiscreteLattice f, DiscreteLattice feq, float alpha, float beta)
+{
+    DiscreteLattice df = minusL3(f, feq);
+    float ab = alpha*beta;
+    return minusL3(f, mulL3f(df, ab));
+}
+
+
+float compute_g(
+        DiscreteLattice f,
+        DiscreteLattice feq,
+        const float a,const float b) {
+
+    float result = 0.0f;
+    DiscreteLattice c = collision(f,feq,a,b);
+
+    for(int i = 0;i < 7; i++)
+    {
+        for(int j = 0;j < 4; j++)
+        {
+            if((4*i+j) > 26) continue;
+            if(c.v[i][j] < 0.0f) {c.v[i][j] = 0.00001f;}
+            result += c.v[i][j]*log(c.v[i][j]/wi.v[i][j]) - f.v[i][j]*log(f.v[i][j]/wi.v[i][j]);
+        }
+    }
+    return result;
+}
+
+float compute_gradg(
+        DiscreteLattice f,
+        DiscreteLattice feq,
+        const float a, const float b)
+{
+
+    float result = 0.0f;
+    DiscreteLattice c = collision(f,feq,a,b);
+
+    for(int i = 0;i < 7; i++)
+    {   for(int j = 0;j < 4; j++)
+        {
+            if((4*i+j) > 26) continue;
+            if(c.v[i][j] < 0.0f) {c.v[i][j] = 0.00001f;}
+            result += -b*(f.v[i][j] - feq.v[i][j])*(log(c.v[i][j]/wi.v[i][j]) + 1.0f);
+        }
+    }
+    return result;
+}
+
+float constrain_entropy(
+        DiscreteLattice f,
+        DiscreteLattice feq,
+        const float b,
+        const float alpha_old)
+{
+    // calculate deviation
+    float amin=0.2f;
+    float amax=alpha_old;
+    float maxDeviation = 0.0f;
+    for(int i = 0;i < 7; i++)
+    {   for(int j = 0;j < 4; j++)
+        {
+            if((4*i+j) > 26) continue;
+            float deviation = abs(f.v[i][j]-feq.v[i][j])/feq.v[i][j];
+            if(deviation > maxDeviation)
+                maxDeviation = deviation;
+        }
+    }
+
+    // if deviation is too large
+    //float stableDeviation = 0.2;
+    if(maxDeviation < 0.1f) return amax;
+
+    // compute G value
+    float Gmin = compute_g(f,feq,amin,b);
+    float Gmax = compute_g(f,feq,amax,b);
+    float gradGmin = compute_gradg(f,feq,amin,b);
+    float gradGmax = compute_gradg(f,feq,amax,b);
+    if((Gmin*Gmax) > 0.0f) return amax;
+    if(Gmin > 0.0f){ float tmp = amin;amin = amax;amax = tmp; }
+
+    float a = 0.5f*(amin + amax);
+    float da = abs(amax - amin);
+    float a_o = a;
+    //float da_o = da;
+    float G = compute_g(f,feq,a,b);
+    float gradG = compute_gradg(f,feq,a,b);
+
+    int maxIter = 10;
+    float tolerance = 0.0001f;
+    for(int it = 0; it < maxIter; it++)
+    {
+        if( ( ((a-amax)*gradG-G)*((a-amin)*gradG-G) >= 0.0f )
+                ||  ( abs(a_o*gradG-G-1.0f) > 1.0f ) )
+        {
+            // bisection
+            //da_o = da;
+            da = 0.5f*(amax - amin);
+            a = amin-amax;
+            if(amin == a) return a;
+        }else
+        {
+            //da_o = da;
+            da = G/gradG;
+            a_o = a;
+            a -= da;
+            if(a_o == a) return a;
+        }
+        if(abs(da) < tolerance) return a;
+
+        G = compute_g(f,feq,a,b);
+        gradG = compute_gradg(f,feq,a,b);
+        if(G < 0.0f) {amin = a;}
+        else {amax = a;}
+    }
+
+    return amax;
+
+}
