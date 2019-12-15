@@ -2,7 +2,7 @@
 
 ### 1. Spectral-projection method
 Original code from cuda-10.0 code example.   
-Original code applied method of charcteristics + projection, results in a super viscous fluid.  
+Original code applied method of charcteristics + projection, results to super viscous behaviour.  
 Modifications have been made to implement an unconditionally stable, 2nd-order advection scheme.  
 
 ### 2. nbody
