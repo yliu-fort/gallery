@@ -14,7 +14,7 @@ public:
     unsigned int ID;
     // constructor generates the shader on the fly
     // ------------------------------------------------------------------------
-    Shader():ID(NULL),isComputeShader(false) {}
+    Shader():ID(0),isComputeShader(false) {}
     Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr);
     Shader(const char* computePath); // Compute shader, require OpenGL version >= 4.0
     void reload_shader_program_from_files(const char*,const char*,const char* = nullptr );
@@ -30,7 +30,7 @@ public:
     // ------------------------------------------------------------------------
     void setBool(const std::string &name, bool value) const
     {
-        glUniform1i(glGetUniformLocation(ID, name.c_str()), (int)value);
+        glUniform1i(glGetUniformLocation(ID, name.c_str()), static_cast<int>(value));
     }
     // ------------------------------------------------------------------------
     void setInt(const std::string &name, int value) const

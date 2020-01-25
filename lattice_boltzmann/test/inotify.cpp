@@ -41,7 +41,7 @@ int main( int argc, char **argv )
     }
  
   /* do it forever*/
-  while(1)
+  while(0)
     {
       i = 0;
       length = read( fd, buffer, BUF_LEN );
@@ -78,6 +78,7 @@ int main( int argc, char **argv )
           i += EVENT_SIZE + event->len;
         }
       }
+
     }
  
   /* Clean up*/

@@ -34,5 +34,5 @@ void main()
 {
     vs_out.gridPos = fetch3D(gl_InstanceID, gridSize);
 
-    gl_Position = vec4(vs_out.gridPos*voxelSize, 1.0);
+    gl_Position = vec4(vs_out.gridPos*voxelSize, 1.0); // normalize to vec3(0.0 - 1.0) for texture lookup
 }

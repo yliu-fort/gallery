@@ -1,7 +1,8 @@
 #include "filesystemmonitor.h"
+#include "inotify.h"
 #include <future>
 #include <chrono>
-#include "inotify.h"
+
 
 static std::future<bool> _threadHandle;
 static bool isInitialized = false;

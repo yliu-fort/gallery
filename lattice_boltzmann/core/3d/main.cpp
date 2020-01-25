@@ -17,7 +17,9 @@
 #include "colormap.h"
 #include "filesystemmonitor.h"
 #include "isosurface.h"
+#include "slice.h"
 #include "boundingbox.h"
+#include "image_io.h"
 
 #include "lbm3dgpu.h"
 
@@ -26,13 +28,13 @@ static int SCR_WIDTH  = 800;
 static int SCR_HEIGHT = 600;
 
 // Grid size, must be a integer multiplier of 8 for kernel tiling
-static glm::ivec3 scale(glm::ivec3(16,4,8));
+static glm::ivec3 scale(glm::ivec3(8,2,2)*4);
 static int nx = (8)*scale.x;
 static int ny = (8)*scale.y;
 static int nz = (8)*scale.z;
 
 // camera
-Camera camera = Camera(glm::vec3(1.0f, 1.0f, 5.0f), (float)SCR_WIDTH/SCR_HEIGHT);
+static Camera camera = Camera(glm::vec3(1.0f, 1.0f, 5.0f), (float)SCR_WIDTH/SCR_HEIGHT);
 
 static float lastX = SCR_WIDTH / 2.0f;
 static float lastY = SCR_HEIGHT / 2.0f;
@@ -57,10 +59,11 @@ void renderCube();
 // Display texture
 static int selectTexture = 0;
 static int renderType = 0;
-static float slidebar = 0.5f;
+static float slidebar = 0.05f;
 
 // simulation related parameter
 static bool initFluid = true;
+static int timestep = 0;
 
 // Initial customized shaders...
 // File path must be modified before compiling the script.
@@ -89,19 +92,21 @@ int main()
 
     // Gen colormap
     Colormap::Plasma();
+    Colormap::Bind(15);
 
     // Isosurface
     IsoSurface::Init();
-    //IsoSurface::Demo(nx,ny,nz);
+    Slice::Init();
 
     // configure g-buffer framebuffer
     // ------------------------------
-    Lattice3DOpenGLInterface::Create(nx, ny, nz);
+    Lattice3DOpenGLInterface::Create(nx, ny, nz, true);
 
     while( !glfwWindowShouldClose( window ) )
     {
         // per-frame time logic
         // --------------------
+        timestep = Lattice3DOpenGLInterface::GetTimestep();
         countAndDisplayFps(window);
 
         // input
@@ -109,48 +114,63 @@ int main()
         glfwGetFramebufferSize(window, &SCR_WIDTH, &SCR_HEIGHT);
         processInput(window);
 
+        // Reset parameters
+        if(initFluid)
+        {
+            initFluid = false;
+            slidebar = 0.5f;
+            Lattice3DOpenGLInterface::Reset();
+        }
+
         // Shader configuration
         if (FileSystemMonitor::Update())
         {
             fluid3DInitShader.reload_shader_program_from_files(FP("fluid3d.init.glsl"));
             fluid3DComputeShader.reload_shader_program_from_files(FP("fluid3d.solve.glsl"));
             IsoSurface::ReloadShader();
+            Slice::ReloadShader();
         }
 
+        // Initialize simulation
+        if(Lattice3DOpenGLInterface::Isinitializing()) {fluid3DInitShader.use();}
+        else { fluid3DComputeShader.use(); }
+
+        Lattice3DOpenGLInterface::Compute();
+
+        // 2. rendering pass
+        if(!Lattice3DOpenGLInterface::IsInInternalCycle())
         {
-            // Uniform Buffer binding
-            fluid3DComputeShader.use();
-            fluid3DComputeShader.setInt("nstep",Lattice3DOpenGLInterface::GetTimestep());
-        }
-
-        if(initFluid){ // launch compute shaders
-            initFluid=false;
-            fluid3DInitShader.use();
-            Lattice3DOpenGLInterface::Compute();
-            Lattice3DOpenGLInterface::Reset();
-            Lattice3DOpenGLInterface::Incr();
-        }
-
-        {
-            Colormap::Bind(12);
-            fluid3DComputeShader.use();
-            Lattice3DOpenGLInterface::Compute();
-            Lattice3DOpenGLInterface::Incr();
-        }
-
-        {
-            // 2. rendering pass
             glViewport(0,0,SCR_WIDTH, SCR_HEIGHT);
             glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             Lattice3DOpenGLInterface::BindTexRead();
-            IsoSurface::Draw(2, slidebar,camera.GetFrustumMatrix()*glm::scale(glm::mat4(1.0), 2.0f*glm::vec3(nx/(float)ny,1.0f,nz/(float)ny)),glm::ivec3(nx,ny,nz));
-
-            //Draw bounding box
-            Boundingbox::Draw(camera.GetFrustumMatrix()*glm::translate(glm::scale(glm::mat4(1.0),glm::vec3(nx/(float)ny,1.0f, nz/(float)ny)), glm::vec3(1)));
+            IsoSurface::Draw(2, 0.5,camera,glm::ivec3(nx,ny,nz));
+            Slice::Draw(2, slidebar,camera,glm::ivec3(nx,ny,nz));
+            Boundingbox::Draw(camera.GetFrustumMatrix()*glm::translate(glm::scale(glm::mat4(1.0),0.5f*glm::vec3(nx/(float)ny,1.0f, nz/(float)ny)), glm::vec3(1)));
         }
+        // For extreme large simulations, need an offscreen version without texture rendering...(isosurface is really heavy when > 16M grid points)
+        //Draw bounding box
+        //glViewport(0,0,SCR_WIDTH, SCR_HEIGHT);
+        //glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        //Boundingbox::Draw(camera.GetFrustumMatrix()*glm::translate(glm::scale(glm::mat4(1.0),glm::vec3(nx/(float)ny,1.0f, nz/(float)ny)), glm::vec3(1)));
 
-        //if(Lattice3DOpenGLInterface::GetTimestep() == 15000) Lattice3DOpenGLInterface::DumpAll();
+        // Autosave
+        if(Lattice3DOpenGLInterface::GetTimestep()%2000==1000 ) Lattice3DOpenGLInterface::Autosave();
+
+        // Output vtk result
+        //if(
+        //        //(Lattice3DOpenGLInterface::GetTimestep()>1000 &&
+        //        // Lattice3DOpenGLInterface::GetTimestep()%200==0)
+        //        )
+        //{
+        //    Lattice3DOpenGLInterface::DumpAll();
+        //}
+
+        // Auto exit
+        if(Lattice3DOpenGLInterface::GetTimestep() > 360000){glfwTerminate();EXIT_SUCCESS;}
+
+        //if(Lattice3DOpenGLInterface::GetTimestep()==50) ImageIO::Save(SCR_WIDTH, SCR_HEIGHT, Lattice3DOpenGLInterface::GetTimestep(),1);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -182,19 +202,24 @@ void countAndDisplayFps(GLFWwindow* window)
         title [255] = '\0';
 
         snprintf ( title, 255,
-                   "FAST+ARB DEMO - FPS: %4.2f | runtime: %.0fs | Resolution %dx%dx%d: %d",
-                   frameCount/(glfwGetTime() - lastFpsCountFrame), glfwGetTime(),nx,ny,nz,nx*ny*nz );
+                   "FAST+ARB DEMO - FPS: %4.2f | runtime: %.0fs | nstep: %d | Resolution %dx%dx%d: %d",
+                   frameCount/(glfwGetTime() - lastFpsCountFrame), glfwGetTime(),timestep, nx,ny,nz,nx*ny*nz );
         glfwSetWindowTitle(window, title);
 
         frameCount = 0;
         lastFpsCountFrame = glfwGetTime();
     }
+    if(deltaTime > 600.0f) {
+        std::cout << "No response for 600 sec... exit program." << std::endl;
+        glfwTerminate();
+        EXIT_FAILURE;
+    }
 }
 
 // renderCube() renders a 1x1 3D cube in NDC.
 // -------------------------------------------------
-unsigned int cubeVAO = 0;
-unsigned int cubeVBO = 0;
+static unsigned int cubeVAO = 0;
+static unsigned int cubeVBO = 0;
 void renderCube()
 {
     // initialize (if necessary)
@@ -269,8 +294,8 @@ void renderCube()
 
 // renderQuad() renders a 1x1 XY quad in NDC
 // -----------------------------------------
-unsigned int quadVAO = 0;
-unsigned int quadVBO;
+static unsigned int quadVAO = 0;
+static unsigned int quadVBO = 0;
 void renderQuad()
 {
     if (quadVAO == 0)
@@ -337,9 +362,9 @@ void processInput(GLFWwindow *window)
     key_space_old_state = glfwGetKey(window, GLFW_KEY_SPACE);
 
     if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
-        slidebar += deltaTime;
+        slidebar += 0.1f*deltaTime;
     if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
-        slidebar -= deltaTime;
+        slidebar -= 0.1f*deltaTime;
 
     if ( (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) && (key_i_old_state == GLFW_RELEASE) ) {
 
@@ -442,6 +467,10 @@ GLFWwindow* initGL(int w, int h)
     std::cout << "Maximum nr of image uniforms supported by fragment shader: " << nrAttributes << std::endl;
     glGetIntegerv(GL_MAX_COMPUTE_IMAGE_UNIFORMS, &nrAttributes);
     std::cout << "Maximum nr of image uniforms supported by compute shader: " << nrAttributes << std::endl;
+    glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &nrAttributes);
+    std::cout << "GL_MAX_SHADER_STORAGE_BLOCK_SIZE is " << nrAttributes << " bytes." << std::endl;
+    glGetIntegerv(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, &nrAttributes);
+    std::cout << "Maximum nr of shader storage buffer binding points is " << nrAttributes << " ." << std::endl;
     
     // Compute Shader Configuration
     int work_grp_cnt[3], work_grp_inv;

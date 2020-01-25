@@ -10,5 +10,8 @@ target_link_libraries(hello_triangle ${LIBS})
 add_executable(macro_expansion "macro_expansion.cpp")
 add_executable(inotify "inotify.cpp")
 
+# DEMOS
 add_subdirectory("marchingCubes")
 add_subdirectory("computeShader")
+add_subdirectory("imGUI")
+add_subdirectory("IO")

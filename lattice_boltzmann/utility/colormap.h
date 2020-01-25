@@ -18,9 +18,9 @@ namespace Colormap {
 // handle in cpu
 static std::vector<glm::vec3> _colorMap;
 // handle in gpu
-static unsigned int *_colorMapHandle = NULL;
+static unsigned int *_colorMapHandle = nullptr;
 // Texture binding point
-static int _id = 5;
+static int _id = 10;
 
 // _func() is undesired to be called from out of the scope
 // destroy method
@@ -28,20 +28,20 @@ void _release()
 {
     glDeleteTextures(1, _colorMapHandle);
     delete _colorMapHandle;
-    _colorMapHandle = NULL;
+    _colorMapHandle = nullptr;
 }
 
 // APIs: expected to be called from outerscope
 // initialization method
 void GLinit()
 {
-    if(_colorMapHandle != NULL) _release();
+    if(_colorMapHandle) _release();
 
     // Allocate and bind texture buffer
     _colorMapHandle = new unsigned int;
     glGenTextures(1, _colorMapHandle);
     glBindTexture(GL_TEXTURE_1D, *_colorMapHandle);
-    glTexImage1D(GL_TEXTURE_1D, 0, GL_RGB16, (int)_colorMap.size(), 0, GL_RGB, GL_FLOAT, &_colorMap[0]);
+    glTexImage1D(GL_TEXTURE_1D, 0, GL_RGB16, int(_colorMap.size()), 0, GL_RGB, GL_FLOAT, &_colorMap[0]);
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -50,7 +50,7 @@ void GLinit()
 void Bind()
 {
     // Check if colormap handle is configured
-    if(_colorMapHandle == NULL) return;
+    if(!_colorMapHandle) return;
 
     // Bind to texture
     glActiveTexture(GL_TEXTURE0+_id);
@@ -60,14 +60,14 @@ void Bind()
 void Bind(int id)
 {
     // Check if colormap handle is configured
-    if(_colorMapHandle == NULL) return;
+    if(!_colorMapHandle) return;
 
     // Bind to texture
     glActiveTexture(GL_TEXTURE0+id);
     glBindTexture(GL_TEXTURE_1D, *_colorMapHandle);
 }
 
-const int ID()
+int ID()
 {
     return _id;
 }
@@ -82,11 +82,11 @@ void Rainbow()
     for(unsigned int i = 0; i < mapResolution; i++)
     {
         /*plot short rainbow RGB*/
-        float f = i/(mapResolution - 1.0f);
-        float a=(1-f)/0.25;    //invert and group
-        int X=floor(a);    //this is the integer part
-        int Y=floor(255*(a-X)); //fractional part from 0 to 255
-        float r,g,b;
+        double f = i/(mapResolution - 1.0);
+        double a=(1-f)/0.25;    //invert and group
+        int X=int(floor(a));    //this is the integer part
+        int Y=int(floor(255*(a-X))); //fractional part from 0 to 255
+        float r=0.0f,g=0.0f,b=0.0f;
         switch(X)
         {
         case 0: r=255;g=Y;b=0;break; // RED f = 1

@@ -5,7 +5,7 @@ file(GLOB SOURCE
     "*.h"
     "*.cpp"
     "*.glsl"
-    ${UTILITY}
+    #${UTILITY}
     )
 
 # then create a project file per tutorial

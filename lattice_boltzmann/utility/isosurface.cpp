@@ -9,9 +9,11 @@
 
 //GLFW
 #include <GLFW/glfw3.h>
+#include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
 
+#include "camera.h"
 #include "shader.h"
 #include "cmake_source_dir.h"
 
@@ -581,6 +583,7 @@ static unsigned int triTableTex;
 static unsigned int numVertsTableTex;
 static unsigned int dummyVAO;
 static Shader _shaderHandle;
+#define FACE_CULLING
 
 void IsoSurface::ReloadShader()
 {
@@ -626,15 +629,17 @@ void IsoSurface::Init()
     glGenVertexArrays(1, &dummyVAO);
 }
 
-template<typename T>
-void IsoSurface::Draw(int target, T isoValue,
-                      const glm::mat4& frustum,
-                      const glm::ivec3& gridSize)
+template<typename T, typename S>
+void IsoSurface::Draw(int target, float isoValue,
+                      const T& camera,
+                      const S& gridSize)
 {
 
     // Set uniform attributes
     _shaderHandle.use();
-    _shaderHandle.setMat4("projectionMatrix", frustum);
+    _shaderHandle.setMat4("projectionMatrix", camera.GetFrustumMatrix()*glm::scale(glm::mat4(1.0),
+                                              glm::vec3(gridSize.x/(float)gridSize.y,1.0f,gridSize.z/(float)gridSize.y)));
+    _shaderHandle.setVec3("viewPos",camera.Position);
     _shaderHandle.setInt("volumeTex",target);
     _shaderHandle.setInt("triTex",10);
     _shaderHandle.setInt("numVertsTex",11);
@@ -651,7 +656,7 @@ void IsoSurface::Draw(int target, T isoValue,
     // Draw
 #ifdef FACE_CULLING
     glEnable(GL_CULL_FACE); // Enable to decrease computing load
-    glCullFace(GL_BACK);
+    glCullFace(GL_FRONT);
 #endif
     glBindVertexArray(dummyVAO);
     glDrawArraysInstanced(GL_POINTS,0,1,gridSize.x*gridSize.y*gridSize.z);
@@ -661,9 +666,9 @@ void IsoSurface::Draw(int target, T isoValue,
 #endif
 }
 
-template void IsoSurface::Draw<float>(int, float, const glm::mat4&, const glm::ivec3&);
-template void IsoSurface::Draw<double>(int, double, const glm::mat4&, const glm::ivec3&);
-template void IsoSurface::Draw<int>(int, int, const glm::mat4&, const glm::ivec3&);
+template void IsoSurface::Draw<Camera, glm::ivec3>(int, float, const Camera&, const glm::ivec3&);
+//template void IsoSurface::Draw<double>(int, double, const glm::mat4&, const glm::ivec3&);
+//template void IsoSurface::Draw<int>(int, int, const glm::mat4&, const glm::ivec3&);
 
 // Initialize 3d datafield
 //Datafield//

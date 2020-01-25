@@ -647,7 +647,7 @@ int main(int argc, char **argv)
     glEnable(GL_DEPTH_TEST);
     //glEnable(GL_CULL_FACE); // Enable to decrease computing load
 
-    MCShader.reload_shader_program_from_files(FP("shader.vert"),FP("shader.frag"),FP("shader.geom.glsl"));
+    MCShader.reload_shader_program_from_files(FP("shader.vert"),FP("shader.bp.frag"),FP("shader.geom.glsl"));
 
     //Triangle Table texture//
     //This texture store the vertex index list forgridPos
@@ -705,8 +705,8 @@ int main(int argc, char **argv)
                 //dataField[i+j*gridSize.x+k*gridSize.x*gridSize.y] = sin(0.4*i + 0.4*j + 0.4*k);
                 //dataField[i+j*gridSize.x+k*gridSize.x*gridSize.y] = sin(0.1*i * 0.1*j * 0.1*k);
                 //dataField[i+j*gridSize.x+k*gridSize.x*gridSize.y] = torus(2*i/(float)gridSize.x-1,2*j/(float)gridSize.y-1,2*k/(float)gridSize.z-1);
-                //dataField[i+j*gridSize.x+k*gridSize.x*gridSize.y] = tangle(2*i/(float)gridSize.x-1,2*j/(float)gridSize.y-1,2*k/(float)gridSize.z-1);
-                dataField[i+j*gridSize.x+k*gridSize.x*gridSize.y] = surf_of_evolution(2*i/(float)gridSize.x-1,2*j/(float)gridSize.y-1,2*k/(float)gridSize.z-1);
+                dataField[i+j*gridSize.x+k*gridSize.x*gridSize.y] = tangle(2*i/(float)gridSize.x-1,2*j/(float)gridSize.y-1,2*k/(float)gridSize.z-1);
+                //dataField[i+j*gridSize.x+k*gridSize.x*gridSize.y] = surf_of_evolution(2*i/(float)gridSize.x-1,2*j/(float)gridSize.y-1,2*k/(float)gridSize.z-1);
                 //std::cout << dataField[i+j*gridSize.x+k*gridSize.x*gridSize.y] << std::endl;
             }
     glTexImage3D( GL_TEXTURE_3D, 0, GL_R32F, gridSize.x, gridSize.y, gridSize.z, 0,
@@ -734,6 +734,7 @@ int main(int argc, char **argv)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         MCShader.use();
         MCShader.setMat4("projectionMatrix",camera.GetPerspectiveMatrix()*camera.GetViewMatrix() );
+        MCShader.setVec3("viewPos",camera.Position );
         MCShader.setInt("volumeTex",0);
         MCShader.setInt("triTex",1);
         MCShader.setInt("numVertsTex",2);

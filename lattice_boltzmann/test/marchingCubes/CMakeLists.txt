@@ -9,7 +9,7 @@ configure_file("${CONFIGURE_SRC_PATH_TEMPLATE}" "${CMAKE_CURRENT_SOURCE_DIR}/cma
                "*.h"
                "*.cpp"
                "shader.*"
-               ${UTILITY}
+               #${UTILITY}
                )
 
            add_executable(marching_cubes ${SOURCE})

@@ -132,19 +132,20 @@ int main()
     //Setting up the Shader Storage Buffer Objects in Your C Program
     // This is interleaved storage pattern
     glBindBuffer( GL_SHADER_STORAGE_BUFFER, fBuf );
-    glBufferData( GL_SHADER_STORAGE_BUFFER, nx*ny*nz * sizeof(float)*(4*5), NULL, GL_STATIC_DRAW );
+    glBufferData( GL_SHADER_STORAGE_BUFFER, nx*ny*nz * sizeof(double)*(2), NULL, GL_STATIC_DRAW );
     GLint bufMask = GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT ; // the invalidate makes a big difference when re-writing
-    glm::vec4* val = (glm::vec4*)glMapBufferRange(GL_SHADER_STORAGE_BUFFER,0,
-                                          nx*ny*nz * sizeof(float)*(4*5),bufMask);
+    double* val = (double*)glMapBufferRange(GL_SHADER_STORAGE_BUFFER,0,
+                                          nx*ny*nz * sizeof(double)*(2),bufMask);
     for(int k=0; k<nz; k++)
         for(int j=0; j<ny; j++)
             for(int i=0; i<nx; i++){
                 int ind = i+j*nx+k*nx*ny;
                 int scale = 1;
-                val[5*ind+0].x=glm::distance(glm::vec3(i, j, k),glm::vec3(8*scale))/(8.0f*scale);
-                val[5*ind+1].x=glm::distance(glm::vec3(i, j, k),glm::vec3(16*scale))/(16.0f*scale);
-                val[5*ind+2].x=glm::distance(glm::vec3(i, j, k),glm::vec3(32*scale))/(32.0f*scale);
-                val[5*ind+3].x=glm::distance(glm::vec3(i, j, k),glm::vec3(64*scale))/(64.0f*scale);
+                val[2*ind]=glm::distance(glm::dvec3(i, j, k),glm::dvec3(8*scale))/(8.0*scale);
+                //val[5*ind+0].x=glm::distance(glm::dvec3(i, j, k),glm::dvec3(8*scale))/(8.0*scale);
+                //val[5*ind+1].x=glm::distance(glm::dvec3(i, j, k),glm::dvec3(16*scale))/(16.0*scale);
+                //val[5*ind+2].x=glm::distance(glm::dvec3(i, j, k),glm::dvec3(32*scale))/(32.0*scale);
+                //val[5*ind+3].x=glm::distance(glm::dvec3(i, j, k),glm::dvec3(64*scale))/(64.0*scale);
                 //val[5*ind+4].x=glm::distance(glm::vec3(i, j, k),glm::vec3(64*scale))/(64.0f*scale);
             }
     glUnmapBuffer( GL_SHADER_STORAGE_BUFFER );
@@ -184,7 +185,7 @@ int main()
             //Lattice3DOpenGLInterface::BindTexRead();
             //renderQuad();
             IsoSurface::Draw(0, slidebar+1.0f,
-                             camera.GetFrustumMatrix()*glm::scale(glm::mat4(1.0), glm::vec3(nx/(float)ny,1.0,nz/(float)ny)),
+                             camera,
                              glm::ivec3(nx,ny,nz));
         }
 

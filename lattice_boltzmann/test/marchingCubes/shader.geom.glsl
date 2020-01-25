@@ -2,7 +2,13 @@
 layout (points) in;
 layout (triangle_strip, max_vertices = 15) out;
 
-out vec3 aNorm;
+//out vec3 aNorm;
+
+out GS_OUT {
+    vec3 FragPos;
+    vec3 Normal;
+    vec3 Color;
+} gs_out;
 
 in VS_OUT {
     ivec3 gridPos;
@@ -166,15 +172,18 @@ void generateTriangles(ivec3 gridPos, vec3 p)
         vec3 n = normalize(calcNormal(v[0], v[1], v[2]));
 
         // Draw triangle in order 2->1->0 for face culling
-        aNorm = n;
+        gs_out.FragPos = v[2];
+        gs_out.Normal = n;
         gl_Position = projectionMatrix*vec4(v[2], 1.0); // tri vertex 0
         EmitVertex();
 
-        aNorm = n;
+        gs_out.FragPos = v[1];
+        gs_out.Normal = n;
         gl_Position = projectionMatrix*vec4(v[1], 1.0); // tri vertex 1
         EmitVertex();
 
-        aNorm = n;
+        gs_out.FragPos = v[0];
+        gs_out.Normal = n;
         gl_Position = projectionMatrix*vec4(v[0], 1.0); // tri vertex 2
         EmitVertex();
         EndPrimitive();
@@ -188,27 +197,33 @@ void main() {
     //render_point(vec3(1.0)*classifyVoxel()/15.0f, gl_in[0].gl_Position);
     //render_point(vec3(1.0)*sampleVolume(gs_in[0].gridPos, gridSize), gl_in[0].gl_Position); // Debug volume texture
     //render_point(vec3(1.0)*texelFetch(numVertsTex, 1, 0).r, gl_in[0].gl_Position); // Debug numverts texture
-    //aNorm = gs_in[0].gridPos*voxelSize/4.0;
-    //aNorm = vec3(0.7);
+    //gs_out.Normal = gs_in[0].gridPos*voxelSize/4.0;
+    gs_out.Color = vec3(0.7);
     generateTriangles(gs_in[0].gridPos, gl_in[0].gl_Position.xyz);
 }
 
 void render_quad(vec4 position)
 {
-    aNorm = gs_in[0].gridPos*voxelSize; // gs_in[0] since there's only one input vertex
+
+    gs_out.Normal = gs_in[0].gridPos*voxelSize; // gs_in[0] since there's only one input vertex
     gl_Position = position + vec4(voxelSize*vec3(0, 0, 0.0),0.0); // 1:bottom-left
+    gs_out.FragPos = vec3(gl_Position);
     gl_Position = projectionMatrix*gl_Position;
     EmitVertex();
     gl_Position = position + vec4(voxelSize*vec3(1, 0, 0.0),0.0); // 2:bottom-right
+    gs_out.FragPos = vec3(gl_Position);
     gl_Position = projectionMatrix*gl_Position;
     EmitVertex();
     gl_Position = position + vec4(voxelSize*vec3(1, 1, 0.0),0.0); // 4:top-right
+    gs_out.FragPos = vec3(gl_Position);
     gl_Position = projectionMatrix*gl_Position;
     EmitVertex();
     gl_Position = position + vec4(voxelSize*vec3(0, 1, 0.0),0.0); // 3:top-left
+    gs_out.FragPos = vec3(gl_Position);
     gl_Position = projectionMatrix*gl_Position;
     EmitVertex();
     gl_Position = position + vec4(voxelSize*vec3(0, 0, 0.0),0.0); // 1:bottom-left
+    gs_out.FragPos = vec3(gl_Position);
     gl_Position = projectionMatrix*gl_Position;
     EmitVertex();
     EndPrimitive();
@@ -216,7 +231,7 @@ void render_quad(vec4 position)
 
 void render_point(vec3 color, vec4 position)
 {
-    aNorm = color; // gs_in[0] since there's only one input vertex
+    gs_out.Normal = color; // gs_in[0] since there's only one input vertex
     gl_Position = projectionMatrix*position; // 1:bottom-left
     EmitVertex();
     EndPrimitive();

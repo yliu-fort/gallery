@@ -2,7 +2,7 @@
 #include <fstream>
 #include <sstream>
 
-Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath):ID(NULL),isComputeShader(false)
+Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath):ID(0),isComputeShader(false)
 {
     // 1. retrieve the vertex/fragment source code from filePath
     std::string vertexCode;
@@ -50,21 +50,21 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
     unsigned int vertex, fragment;
     // vertex shader
     vertex = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertex, 1, &vShaderCode, NULL);
+    glShaderSource(vertex, 1, &vShaderCode, nullptr);
     glCompileShader(vertex);
     checkCompileErrors(vertex, "VERTEX");
     // fragment Shader
     fragment = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragment, 1, &fShaderCode, NULL);
+    glShaderSource(fragment, 1, &fShaderCode, nullptr);
     glCompileShader(fragment);
     checkCompileErrors(fragment, "FRAGMENT");
     // if geometry shader is given, compile geometry shader
-    unsigned int geometry;
-    if(geometryPath != nullptr)
+    unsigned int geometry = 0;
+    if(geometryPath)
     {
         const char * gShaderCode = geometryCode.c_str();
         geometry = glCreateShader(GL_GEOMETRY_SHADER);
-        glShaderSource(geometry, 1, &gShaderCode, NULL);
+        glShaderSource(geometry, 1, &gShaderCode, nullptr);
         glCompileShader(geometry);
         checkCompileErrors(geometry, "GEOMETRY");
     }
@@ -72,24 +72,24 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
     ID = glCreateProgram();
     glAttachShader(ID, vertex);
     glAttachShader(ID, fragment);
-    if(geometryPath != nullptr)
+    if(geometryPath)
         glAttachShader(ID, geometry);
     glLinkProgram(ID);
     checkCompileErrors(ID, "PROGRAM");
     // delete the shaders as they're linked into our program now and no longer necessery
     glDeleteShader(vertex);
     glDeleteShader(fragment);
-    if(geometryPath != nullptr)
+    if(geometryPath)
         glDeleteShader(geometry);
 
     // Save path
     _vertexPath = vertexPath;
     _fragmentPath = fragmentPath;
-    if(geometryPath != nullptr) _geometryPath = geometryPath;
+    if(geometryPath) _geometryPath = geometryPath;
 
 }
 
-Shader::Shader(const char* computePath):ID(NULL),isComputeShader(true)
+Shader::Shader(const char* computePath):ID(0),isComputeShader(true)
 {
     // 1. retrieve the compute shader source code from filePath
     std::string computeCode;
@@ -117,7 +117,7 @@ Shader::Shader(const char* computePath):ID(NULL),isComputeShader(true)
     unsigned int compute;
     // vertex shader
     compute = glCreateShader(GL_COMPUTE_SHADER);
-    glShaderSource(compute, 1, &cShaderCode, NULL);
+    glShaderSource(compute, 1, &cShaderCode, nullptr);
     glCompileShader(compute);
     checkCompileErrors(compute, "COMPUTE");
     // shader Program
@@ -141,7 +141,8 @@ void Shader::checkCompileErrors(GLuint shader, std::string type)
         glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
         if(!success)
         {
-            glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+            ID = 0;
+            glGetShaderInfoLog(shader, 1024, nullptr, infoLog);
             std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
         }
     }
@@ -150,7 +151,8 @@ void Shader::checkCompileErrors(GLuint shader, std::string type)
         glGetProgramiv(shader, GL_LINK_STATUS, &success);
         if(!success)
         {
-            glGetProgramInfoLog(shader, 1024, NULL, infoLog);
+            ID = 0;
+            glGetProgramInfoLog(shader, 1024, nullptr, infoLog);
             std::cout << "ERROR::PROGRAM_LINKING_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
         }
     }
