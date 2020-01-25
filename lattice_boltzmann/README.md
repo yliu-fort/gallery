@@ -7,3 +7,7 @@ Curved boundary: staircase
 Corner: haven't been treated specifically, detect&increase viscosity in 3d to stabilize simulation in extremely high Re  
 Boundary method: link-wise  
 No-slip boundary method: bounce-back (2nd-order accurary has been validated in matlab code)  
+
+## matlab codes  
+run system("nvcc -ptx <cu_name>.cu") to compile ptx files before running the script.  
+make sure that nvidia compiler has been installed.  
