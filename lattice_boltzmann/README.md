@@ -11,5 +11,6 @@ No-slip boundary method: bounce-back (2nd-order accurary has been validated in m
 First make sure you have CMake, Git, and GCC by typing as root (sudo) apt-get install g++ cmake git  
 and then get the required packages: Using root (sudo) and type apt-get install libsoil-dev libglm-dev libassimp-dev libglew-dev libglfw3-dev libxinerama-dev libxcursor-dev libxi-dev  
 ## matlab codes  
+small, independent validation codes  
 run system("nvcc -ptx <cu_name>.cu") to compile ptx files before running the script.  
 make sure that nvidia compiler has been installed.  
