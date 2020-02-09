@@ -1,3 +1,3 @@
 ## Author: Yuxuan Liu  
-See hier-taylor-green.m  
+Exec hier_green_vort.m  
 No boundary condition support yet  
