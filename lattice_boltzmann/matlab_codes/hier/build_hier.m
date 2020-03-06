@@ -7,6 +7,7 @@ clear; clc; close all;
 % averaging to coarse grid. not sure how it impacts the stability.
 %% Global parameter
 % Global resolution
+
 scale = 64;ratio = [2 1];
 refine_level = 3;
 
@@ -121,6 +122,7 @@ end
 %rlvl=refine_level;
 %hier{rlvl}.gridding = 10.*double(((hier{rlvl}.X(:)-0.5).^2 + (hier{rlvl}.Y(:)-0.5).^2 < 0.25^2));
 
+<<<<<<< Updated upstream
 %rlvl=refine_level;
 %hier{rlvl}.gridding = 10.*double(((hier{rlvl}.X(:) < 0.15)|(hier{rlvl}.X(:) > 0.85)|(hier{rlvl}.Y(:) < 0.15)|(hier{rlvl}.Y(:) > 0.85)));
 rlvl=2;
@@ -128,6 +130,7 @@ hier{rlvl}.gridding = 10.*double(((hier{rlvl}.X(:)-0.5).^2 + (hier{rlvl}.Y(:)-0.
 
 rlvl=refine_level;
 hier{rlvl}.gridding = 10.*double(((hier{rlvl}.Y(:) >= 0.2)&(hier{rlvl}.Y(:) < 0.3))|((hier{rlvl}.Y(:) >= 0.7)&(hier{rlvl}.Y(:) < 0.8)));
+
 %rlvl=2;
 %hier{rlvl}.gridding = 10.*double((hier{rlvl}.Y(:) > 0.15)&(hier{rlvl}.Y(:) < 0.85));
 

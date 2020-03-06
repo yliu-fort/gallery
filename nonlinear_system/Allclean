@@ -1,0 +1,11 @@
+rm -rf build*
+rm -f cmake_source_dir.h */cmake_source_dir.h */*/cmake_source_dir.h
+rm -f CMakeLists.txt.user
+rm -rf bin/*
+rm -rf result/*
+
+echo rm -rf build*
+echo rm -f cmake_source_dir.h */cmake_source_dir.h */*/cmake_source_dir.h
+echo rm -f CMakeLists.txt.user
+echo rm -rf bin/*
+echo rm -rf result/*
