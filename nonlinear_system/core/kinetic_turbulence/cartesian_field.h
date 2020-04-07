@@ -1,41 +1,10 @@
 #ifndef CARTESIAN_FIELD_H
 #define CARTESIAN_FIELD_H
 
-#include <iostream>
-#include <vector>
-#include <algorithm>
-#include <memory>
-#include <string>
-
-//GLEW
-#define GLEW_STATIC
-#include <GL/glew.h>
-
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-#include "glm/gtc/type_ptr.hpp"
-
-
-// Forward declaration for class Vec4
-class Vec4;
-
 // Forward declaration for functions in namespace algo
-namespace algo
-{
-    void reload_subroutines();
-    void kinetic_simulation_configuration(uint&);
-    void ode45(float, float, const Vec4&, uint=0);
-}
-namespace renderer
-{
-    void reload_subroutines();
-    template<typename T> void draw(const Vec4&, const T&);
-}
-namespace async_io
-{
-    void wait();
-    void dump(const std::vector<glm::vec4>&, const float&, const glm::uvec4&);
-}
+#include "defines.h"
+#include "param.h"
+
 // Consider to write a singleton class to manage pointers
 
 // Allocate geometric field
@@ -43,11 +12,11 @@ class Cartesian2d
 {
 public:
     // Construct: allocate memory in cpu and gpu
-    Cartesian2d() : d_data(0), dim(NULL) {}
-    Cartesian2d(uint nx, uint ny) : d_data(0), dim(NULL)
+    Cartesian2d() : d_data(0), dim(0) {}
+    Cartesian2d(uint nx, uint ny, uint nz=1, uint gx=16, uint gy=16, uint gz=1) : d_data(0), dim(0)
     {
         // Dimension of the data
-        dim = glm::uvec4(nx,ny,1,nx*ny);
+        dim = glm::uvec4(nx,ny,nz,nx*ny*nz);
 
         // Allocate memory on device side
         glGenBuffers(1, &d_data);
@@ -56,7 +25,7 @@ public:
         glBindBuffer( GL_SHADER_STORAGE_BUFFER, 0);
 
         // Compute necessary grid size
-        glm::uvec3 grid(16,16,1);
+        glm::uvec3 grid(gx,gy,gz);
         gridDim = glm::uvec3((dim.x+grid.x-1)/grid.x,(dim.y+grid.y-1)/grid.y,(dim.z+grid.z-1)/grid.z);
 
         // UBO, transfer data to device side
@@ -68,6 +37,7 @@ public:
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo); // Bind to UBO0
 
     }
+
     // Destroy: release memory
     ~Cartesian2d()
     {
@@ -83,6 +53,8 @@ public:
         glBindBuffer( GL_SHADER_STORAGE_BUFFER, 0 );
     }
 
+    // transfer data from device to host
+    // must wait previous async execution before get a mapped pointer to deploy new io event
     void gather()
     {
         // Blocking if necessary
@@ -90,7 +62,7 @@ public:
 
         // Get mapped pointer
         h_data.resize(dim.w);
-        glm::vec4* data = (glm::vec4*)glMapNamedBufferRange(d_data, 0, dim.w,GL_MAP_READ_BIT);
+        glm::vec4* data = (glm::vec4*)glMapNamedBufferRange(d_data, 0, dim.w, GL_MAP_READ_BIT);
 
         // Dump device data
         for(int i = 0; i < dim.w; i++){ h_data[i] = data[i]; }
@@ -99,25 +71,30 @@ public:
 
     }
 
-    uint N()
+    void dispatch() const noexcept
+    {
+        glDispatchCompute(gridDim.x, gridDim.y, gridDim.z);
+    }
+
+    uint N() const
     {
         return dim.w;
     }
 
     template<unsigned int Y>
-    uint n()
+    uint n() const
     {
         static_assert((Y < 3), "dimension must be 0, 1 or 2!");
         return dim[Y];
     }
 
-    uint memsize()
+    uint memsize() const
     {
         return dim.w*sizeof(glm::vec4);
     }
 
     template<unsigned int Y>
-    uint grid()
+    uint grid() const
     {
         static_assert((Y < 3), "dimension must be 0, 1 or 2!");
         return gridDim[Y];
@@ -154,6 +131,7 @@ public:
         // Allocate memory on device side
         alloc(&h_data[0]);
     }
+
     Vec4(const Vec4 &other) : mesh(other.mesh)
     {
         // Allocate memory on device side
@@ -169,7 +147,6 @@ public:
     ~Vec4()
     {
         glDeleteBuffers(1, &d_data);
-
     }
 
     // Sync: data transfer
@@ -196,9 +173,24 @@ public:
         if(!glUnmapNamedBuffer(d_data)) {std::cout <<"unmapping failed\n";}
     }
 
+    void dispatch() const noexcept
+    {
+      mesh->dispatch();
+    }
+
     std::vector<glm::vec4>& get_hptr()
     {
         return h_data;
+    }
+
+    const uint& get_dptr() const
+    {
+        return d_data;
+    }
+
+    const std::shared_ptr<Cartesian2d> get_meshptr() const
+    {
+        return mesh;
     }
 
     // Computing subroutines ?
@@ -269,8 +261,6 @@ public:
     }
 
     // Algorithms need forward declaration & friend declaration here
-    friend void algo::ode45(float, float, const Vec4&, uint);
-    template<typename T> friend void renderer::draw(const Vec4&, const T&);
 
     void report_minmax()
     {
@@ -279,7 +269,7 @@ public:
         std::vector<float> py;
         std::vector<float> pz;
         std::vector<float> pw;
-        for(int i = 0; i < h_data.size(); i++)
+        for(uint i = 0; i < h_data.size(); i++)
         {
             px.push_back(h_data[i].x);
             py.push_back(h_data[i].y);

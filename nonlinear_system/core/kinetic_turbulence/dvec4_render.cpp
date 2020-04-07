@@ -32,11 +32,11 @@ namespace renderer
         // Draw points
         renderer.use();
         renderer.setMat4("projectionMatrix", camera.GetFrustumMatrix());
-        renderer.setInt("numparticles",target.mesh->N());
+        renderer.setInt("numparticles",target.get_meshptr()->N());
         glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,0,target.d_data);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,0,target.get_dptr());
         glBindVertexArray(VAO);
-        glDrawArraysInstanced(GL_POINTS, 0, 1, target.mesh->N());
+        glDrawArraysInstanced(GL_POINTS, 0, 1, target.get_meshptr()->N());
         glBindVertexArray(0);
     }
 

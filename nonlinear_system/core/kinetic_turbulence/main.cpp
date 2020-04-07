@@ -7,19 +7,12 @@
 
 //GLFW
 #include <GLFW/glfw3.h>
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-#include "glm/gtc/type_ptr.hpp"
 
-#include "cmake_source_dir.h"
-//#include "shader.h"
 #include "camera.h"
-//#include "colormap.h"
 #include "filesystemmonitor.h"
 //#include "gui_interface.h"
-//#include "slice.h"
-//#include "boundingbox.h"
-//#include "image_io.h"
+#include "image_io.h"
+#include "defines.h"
 #include "cartesian_field.h"
 
 // settings
@@ -27,7 +20,7 @@ static int SCR_WIDTH  = 800;
 static int SCR_HEIGHT = 600;
 
 // camera
-static Camera camera = Camera(glm::vec3(1.0f, 1.0f, 5.0f), float(SCR_WIDTH)/SCR_HEIGHT);
+static Camera camera = Camera(glm::vec3(0.0f, 0.0f, 5.0f), float(SCR_WIDTH)/SCR_HEIGHT);
 
 static float lastX = SCR_WIDTH / 2.0f;
 static float lastY = SCR_HEIGHT / 2.0f;
@@ -43,13 +36,18 @@ static int frameCount = 0;
 
 // Pre-declaration
 GLFWwindow* initGL(int w, int h);
-void countAndDisplayFps(GLFWwindow* window);
+bool countAndDisplayFps(GLFWwindow* window);
 void processInput(GLFWwindow *window);
 
 //#define VISUAL
-
+#ifndef VISUAL
+    #define BATCH_RUN
+    #ifdef BATCH_RUN
+        //#define BATCH_TEST
+    #endif
+#endif
 // Shortcut
-static bool pause = false;
+static bool pause = true;
 
 int main()
 {
@@ -64,46 +62,127 @@ int main()
     // -----------------------------
     glEnable(GL_DEPTH_TEST);
 
+#ifndef BATCH_TEST
+
     // Read shader
     Vec4::reload_subroutines();
     algo::reload_subroutines();
     renderer::reload_subroutines();
 
+#endif
+
     // For automatic file reloading
     FileSystemMonitor::Init(SRC_PATH);
 
-    // configure g-buffer framebuffer
-    uint nx = 16, ny = 4096;
-    std::shared_ptr<Cartesian2d> mesh(new Cartesian2d(nx,ny));
+#ifdef BATCH_RUN
+    // Generate a param pool
+    uint numcase = 2*3*5;
+    Param pool[numcase];
+
+    // Edit configure pool
+    float initDistRatio[3] = {0.5,1,2};
+    uint rseeds[3] = {123, 98765432, 38496};
+    float time_reso[3] = {0.005,0.002,0.0005};
+    float numeric_tol[3] = {1e-2,1e-3,1e-4};
+    float total_t[3] = {30,10,5};
+    glm::uvec3 initDim[3] = {glm::uvec3(2048,16,1),glm::uvec3(16,2048,1),glm::uvec3(256,256,1)};
+
+    float tau_inv[5] = {100,10,5,2,1};
+    float g[2] = {-9.81,0};
+
+    for(int i = 0; i < 2; i++)
+    {
+        for(int j = 0; j < 3; j++)
+        {
+            for(int k = 0; k < 5; k++)
+            {
+                int index = 3*5*i+5*j+k;
+
+                pool[index].dim = glm::uvec3(1024,16,1);
+                pool[index].sim_type = algo::INERTIAL_PARTICLE;
+
+                pool[index].g = g[i];
+                pool[index].initDist *= initDistRatio[j];
+                pool[index].tau_inv = tau_inv[k];
+
+
+                //pool[index].initDist *= initDistRatio[i];
+                //pool[index].tol = numeric_tol[k];
+                //pool[index].randomSeed = rseeds[j];
+                //pool[index].initDist *= initDistRatio[j];
+                //pool[index].dt = time_reso[i];
+
+                //pool[index].t_end = total_t[i];
+                //pool[index].t_end = total_t[k] < total_t[i] ? total_t[k] : total_t[i];
+
+            }
+        }
+    }
+
+    for(uint ipool = 0; ipool < numcase; ipool++)
+    {
+        pool[ipool].printInfo();
+    }
+
+#ifdef BATCH_TEST
+    goto exit;
+#endif
+
+    for(uint ipool = 0; ipool < numcase; ipool++)
+    {
+        // configure g-buffer framebuffer
+        Param param = pool[ipool];
+        param.genericDir();
+
+#else
+    Param param;
+
+    // Overwrite default parameters here
+    param.dim = glm::uvec3(1024,16,1);
+    param.t = 0.0f;param.t_end = 30.0f;
+    param.dt = 0.002f;
+    param.tau_inv = 10.0;
+    param.g = -9.81;
+    param.sim_type = algo::INERTIAL_PARTICLE;
+
+#endif
+    // Prepare output dir
+    param.printInfoToDir();
+
+    std::shared_ptr<Cartesian2d> mesh(new Cartesian2d(param.dim.x,param.dim.y,param.dim.z,param.grid.x,param.grid.y,param.grid.z));
 
     // Initialize data
     std::vector<glm::vec4> data;
-    for(uint i = 0;i < nx; i++)
+
+    for(uint k = 0; k < param.dim.z; k++)
     {
-        for(uint j = 0; j < ny; j++)
+        for(uint j = 0; j < param.dim.y; j++)
         {
-            // initial distance ~ 1/K_nk
-            data.push_back(glm::vec4(0.0175*(i+0.5f),0.0175*(j+0.5f),0,1));
+            for(uint i = 0;i < param.dim.x; i++)
+            {
+                // initial distance ~ 1/K_nk
+                data.push_back(glm::vec4(param.initDist*(i - 0.5f*param.dim.x),
+                                         param.initDist*(j - 0.5f*param.dim.y),
+                                         param.initDist*(k - 0.5f*param.dim.z),1));
+            }
         }
     }
+
     Vec4 pos(data, mesh);
+    Vec4 vel(mesh);
 
     // Configure kinetic simulation
-    uint ks_ubo;
-    glGenBuffers(1, &ks_ubo);
-    algo::kinetic_simulation_configuration(ks_ubo);
+    uint ks_ubo; glGenBuffers(1, &ks_ubo);
+    algo::ode45_init(ks_ubo, param);
 
-    //pos.printDataChannel<0>();
-    //pos.printDataChannel<1>();
-
-    float t0 = 0;
-    float dt = 0.002f;
-
-    // Dump initial distance
-    int iter = 1;
-    fclose(fopen (FP("result.dat"), "w")); // Reset file
+    // Dump initial data
+    fclose(fopen ((param.getDir() + "/" + "ccd.mean.dat").c_str(), "w")); // Reset file
     pos.gather();
-    async_io::dump(pos.get_hptr(),t0,glm::uvec4(nx,ny,1,nx*ny));
+    async_io::dump("ccd", param.getDir(), pos.get_hptr(),param);
+
+    fclose(fopen ((param.getDir() + "/" + "vel.mean.dat").c_str(), "w")); // Reset file
+    vel.gather();
+    async_io::dump("vel", param.getDir(), vel.get_hptr(),param);
 
     while( !glfwWindowShouldClose( window ) )
     {
@@ -116,18 +195,29 @@ int main()
         glfwGetFramebufferSize(window, &SCR_WIDTH, &SCR_HEIGHT);
         processInput(window);
 
+        // Snapshot
+        //if(param.needDump()) {ImageIO::Save(SCR_WIDTH, SCR_HEIGHT, param.getIter(), true);}
+        //printf("Current time: %f\n",param.getCurrentTimestep());
+
         // Compute
         if(!pause)
         {
 #endif
 
-            algo::ode45(t0,t0+dt,pos,1);
-            t0 += dt;
+            algo::ode45(pos, vel, param);
+
+            param.advCurrentTimestep();
+            param++;
 
 #ifndef VISUAL
             // autosave && exit
-            if(iter++%100 == 0) {pos.gather();async_io::dump(pos.get_hptr(),t0,glm::uvec4(nx,ny,1,nx*ny));}
-            if(t0 > 30) {break;}
+            if(param.needDump()) {
+                pos.gather();
+                async_io::dump("ccd", param.getDir(), pos.get_hptr(),param);
+                vel.gather();
+                async_io::dump("vel", param.getDir(), vel.get_hptr(),param);
+            }
+            if(param.timeOver()) {break;}
             //pos.report_minmax();
 #endif
 
@@ -149,12 +239,19 @@ int main()
     }
 
     async_io::wait();
-    glfwTerminate( );
 
-    return 0;
+#ifdef BATCH_RUN
+}
+#ifdef BATCH_TEST
+exit:
+#endif
+#endif
+glfwTerminate( );
+
+return 0;
 }
 
-void countAndDisplayFps(GLFWwindow* window)
+bool countAndDisplayFps(GLFWwindow* window)
 {
     float currentFrame = float(glfwGetTime());
     deltaTime = currentFrame - lastFrame;
@@ -171,12 +268,14 @@ void countAndDisplayFps(GLFWwindow* window)
 
         frameCount = 0;
         lastFpsCountFrame = float(glfwGetTime());
+        return true;
     }
-    if(deltaTime > 600.0f) {
-        std::cout << "No response for 600 sec... exit program." << std::endl;
+    if(deltaTime > 60.0f) {
+        std::cout << "No response for 60 sec... exit program." << std::endl;
         glfwTerminate();
         EXIT_FAILURE;
     }
+    return false;
 }
 #ifdef VISUAL
 static int key_space_old_state = GLFW_RELEASE;
