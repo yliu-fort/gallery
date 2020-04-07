@@ -19,7 +19,7 @@
 //#include "gui_interface.h"
 //#include "slice.h"
 //#include "boundingbox.h"
-//#include "image_io.h"
+#include "image_io.h"
 #include "cartesian_field.h"
 
 // settings
@@ -27,7 +27,7 @@ static int SCR_WIDTH  = 800;
 static int SCR_HEIGHT = 600;
 
 // camera
-static Camera camera = Camera(glm::vec3(1.0f, 0.5f, 1.0f), float(SCR_WIDTH)/SCR_HEIGHT);
+static Camera camera = Camera(glm::vec3(1.0f, 0.5f, 2.0f), float(SCR_WIDTH)/SCR_HEIGHT);
 
 static float lastX = SCR_WIDTH / 2.0f;
 static float lastY = SCR_HEIGHT / 2.0f;
@@ -43,13 +43,13 @@ static int frameCount = 0;
 
 // Pre-declaration
 GLFWwindow* initGL(int w, int h);
-void countAndDisplayFps(GLFWwindow* window);
+bool countAndDisplayFps(GLFWwindow* window);
 void processInput(GLFWwindow *window);
 
 #define VISUAL
 
 // Shortcut
-static bool pause = false;
+static bool pause = true;
 
 int main()
 {
@@ -73,8 +73,8 @@ int main()
     FileSystemMonitor::Init(SRC_PATH);
 
     // configure g-buffer framebuffer
-    uint nx = 512, ny = 256;
-    std::shared_ptr<Cartesian2d> mesh(new Cartesian2d(nx,ny));
+    uint nx = 128, ny = 128, nz = 1;
+    std::shared_ptr<Cartesian2d> mesh(new Cartesian2d(nx,ny*nz));
 
     // Initialize data
     std::vector<glm::vec4> data;
@@ -82,17 +82,21 @@ int main()
     {
         for(uint j = 0; j < ny; j++)
         {
-            // initial distance ~ 1/K_nk
-            //data.push_back(glm::vec4(0.0175*(i+0.5f),0.0175*(j+0.5f),0,1));
-            data.push_back(glm::vec4(2*(i+0.5f)/(float)nx,(j+0.5f)/(float)ny,0,1));
+            for(uint k = 0; k < nz; k++)
+            {
+                // initial distance ~ 1/K_nk
+                data.push_back(glm::vec4(2*(i + 0.5f)/nx,(j + 0.5f)/ny,(k + 0.5f)/nz,1));
+            }
         }
     }
+
     Vec4 pos(data, mesh);
+    Vec4 vel(mesh);
 
     // Configure kinetic simulation
-    //uint ks_ubo;
-    //glGenBuffers(1, &ks_ubo);
-    //algo::kinetic_simulation_configuration(ks_ubo);
+    uint ks_ubo;
+    glGenBuffers(1, &ks_ubo);
+    algo::kinetic_simulation_configuration(ks_ubo);
 
     //pos.printDataChannel<0>();
     //pos.printDataChannel<1>();
@@ -117,17 +121,27 @@ int main()
         glfwGetFramebufferSize(window, &SCR_WIDTH, &SCR_HEIGHT);
         processInput(window);
 
+        // Snapshot
+        if(iter++%500 == 100)
+        ImageIO::Save(SCR_WIDTH, SCR_HEIGHT, iter, true);
+        //printf("Current time: %f\n",t0);
+
         // Compute
         if(!pause)
         {
 #endif
 
-            algo::ode45(t0,t0+dt,pos,0);
+            algo::ode45(algo::DOUBLE_GYRE3D, t0, t0+dt, pos, vel);
+            //algo::ode45_2nd(t0,t0+dt,pos,vel);
+
             t0 += dt;
 
 #ifndef VISUAL
             // autosave && exit
-            if(iter++%100 == 0) {pos.gather();async_io::dump(pos.get_hptr(),t0,glm::uvec4(nx,ny,1,nx*ny));}
+            if(iter++%100 == 0) {
+                pos.gather();
+                async_io::dump(pos.get_hptr(),t0,glm::uvec4(nx,ny,1,nx*ny));
+            }
             if(t0 > 30) {break;}
             //pos.report_minmax();
 #endif
@@ -155,7 +169,7 @@ int main()
     return 0;
 }
 
-void countAndDisplayFps(GLFWwindow* window)
+bool countAndDisplayFps(GLFWwindow* window)
 {
     float currentFrame = float(glfwGetTime());
     deltaTime = currentFrame - lastFrame;
@@ -172,12 +186,14 @@ void countAndDisplayFps(GLFWwindow* window)
 
         frameCount = 0;
         lastFpsCountFrame = float(glfwGetTime());
+        return true;
     }
-    if(deltaTime > 600.0f) {
-        std::cout << "No response for 600 sec... exit program." << std::endl;
+    if(deltaTime > 60.0f) {
+        std::cout << "No response for 60 sec... exit program." << std::endl;
         glfwTerminate();
         EXIT_FAILURE;
     }
+    return false;
 }
 #ifdef VISUAL
 static int key_space_old_state = GLFW_RELEASE;

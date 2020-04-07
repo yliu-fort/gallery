@@ -62,7 +62,8 @@ void dump_data(const std::vector<glm::vec4>& data, const float& timeLabel, const
                 uint left = i*dim.y + j;
                 uint right = (i+1)*dim.y + j;
                 mean_distance_sqr += pow(data[left].x - data[right].x, 2.0)
-                                   + pow(data[left].y - data[right].y, 2.0);
+                                   + pow(data[left].y - data[right].y, 2.0)
+                                   + pow(data[left].z - data[right].z, 2.0);
             }
         }
         mean_distance_sqr /= (double)numpair;
@@ -93,7 +94,7 @@ void dump_ss(const std::vector<glm::vec4>& data)
         // 2. Compute mean square distance
         for(int i = 0; i < data.size();i++)
         {
-            fprintf(fid,"%f %f\n",data[i].x,data[i].y);
+            fprintf(fid,"%f %f %f\n",data[i].x,data[i].y,data[i].z);
         }
 
         fclose (fid);

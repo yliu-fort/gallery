@@ -22,9 +22,16 @@ class Vec4;
 // Forward declaration for functions in namespace algo
 namespace algo
 {
+    enum simType
+    {
+        DOUBLE_GYRE,
+        DOUBLE_GYRE3D,
+        KINETIC_TURB3D,
+        KS_INERTIAL
+    };
     void reload_subroutines();
     void kinetic_simulation_configuration(uint&);
-    void ode45(float, float, const Vec4&, uint=0);
+    void ode45(simType, float, float, const Vec4&, const Vec4&);
 }
 namespace renderer
 {
@@ -44,10 +51,10 @@ class Cartesian2d
 public:
     // Construct: allocate memory in cpu and gpu
     Cartesian2d() : d_data(0), dim(NULL) {}
-    Cartesian2d(uint nx, uint ny) : d_data(0), dim(NULL)
+    Cartesian2d(uint nx, uint ny, uint nz=1) : d_data(0), dim(NULL)
     {
         // Dimension of the data
-        dim = glm::uvec4(nx,ny,1,nx*ny);
+        dim = glm::uvec4(nx,ny,nz,nx*ny*nz);
 
         // Allocate memory on device side
         glGenBuffers(1, &d_data);
@@ -269,7 +276,7 @@ public:
     }
 
     // Algorithms need forward declaration & friend declaration here
-    friend void algo::ode45(float, float, const Vec4&, uint);
+    friend void algo::ode45(algo::simType, float, float, const Vec4&, const Vec4&);
     template<typename T> friend void renderer::draw(const Vec4&, const T&);
 
     void report_minmax()

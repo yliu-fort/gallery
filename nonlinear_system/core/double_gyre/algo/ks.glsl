@@ -8,6 +8,11 @@ layout(std140, binding = 0) buffer readonlybuffer
     vec4 lhs[];
 };
 
+layout(std140, binding = 1) buffer readonlybuffer2
+{
+    vec4 lhs_2[];
+};
+
 // Uniforms
 layout (std140, binding = 0) uniform meshParameters
 {
@@ -20,10 +25,12 @@ uniform float tol;
 
 struct Param
 {
-    vec4 a_st[16];
-    vec4 a_ct[16];
-    vec4 k_st[16];
-    vec4 k_ct[16];
+    vec4 a_xt[16];
+    vec4 a_yt[16];
+    vec4 a_zt[16];
+    vec4 k_xt[16];
+    vec4 k_yt[16];
+    vec4 k_zt[16];
     vec4 om[16];
 };
 
@@ -31,6 +38,9 @@ layout (std140, binding = 1) uniform kineticParameters
 {
     Param param;
 };
+
+uniform float tau_inv;
+uniform vec4 g;
 
 // Global variables
 ivec3 gridPos;
@@ -42,28 +52,35 @@ int ind()
 }
 
 // Compute subroutine
-// Current: Double-gyre
+// Evaluate velocity
 vec4 f(vec4 p, float t)
 {
     vec4 dpdt = vec4(0,0,0,0);
     vec4 uMat = vec4(0);
     vec4 vMat = vec4(0);
+    vec4 wMat = vec4(0);
 
     // A large L-vortex appeared near origin?
     // Add some constant in position to avoid that...
-    vec2 _p = p.xy + vec2(32.0f,32.0f);
+    vec3 _p = p.xyz + vec3(32.0f,32.0f,32.0f);
 
-    for(int j = 0; j < 16; j++)
+    // Unrolled loops
+    for(int i = 0; i < 16; i++)
     {
-            vec4 KS = _p.x*param.k_st[j] + _p.y*param.k_ct[j] + param.om[j]*t;
-            vec4 dKS = cos( KS )-sin( KS );
+        vec4 KS,dKS;
 
-            uMat += param.a_ct[j]*dKS;
-            vMat -= param.a_st[j]*dKS;
+        KS = _p.x*param.k_xt[i] + _p.y*param.k_yt[i] + _p.z*param.k_zt[i] + param.om[i]*t;
+        dKS = cos( KS ) - sin( KS );
+
+        uMat += param.a_xt[i]*dKS;
+        vMat += param.a_yt[i]*dKS;
+        wMat += param.a_zt[i]*dKS;
+
     }
 
-    dpdt.x += uMat[0];dpdt.x += uMat[1];dpdt.x += uMat[2];dpdt.x += uMat[3];
-    dpdt.y += vMat[0];dpdt.y += vMat[1];dpdt.y += vMat[2];dpdt.y += vMat[3];
+    dpdt.x += dot(uMat,vec4(1));
+    dpdt.y += dot(vMat,vec4(1));
+    dpdt.z += dot(wMat,vec4(1));
 
     return dpdt;
 }
@@ -80,11 +97,13 @@ void main()
     float t = t0;
     float dt0 = t_end - t0;
     float dt = t_end - t0;
+    dt = dt > 0 ? dt:1;
 
     vec4 a1,a2,a3,a4,a5,a6,dpdt,ds;
     vec4 p = lhs[linearIndex];
 
     float s;
+    dpdt = f(p,t);
 
     while(t < t_end)
     {
@@ -131,6 +150,7 @@ void main()
         }
 
         // Compute optimal dpdt
+        // Caution: must store dt*f or you will have numerical accuracy issue (truncation)
         {
             a1 = dt*f(p,t);
             a2 = dt*f(p+0.25f*a1,t+0.25f*dt);
@@ -146,7 +166,8 @@ void main()
         p = p + dpdt;
     }
 
-    lhs[linearIndex] = vec4(p.x,p.y,0,1);
+    lhs[linearIndex] = p;
+    lhs_2[linearIndex] = dpdt/dt; // velocity
 }
 
 

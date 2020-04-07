@@ -11,9 +11,15 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 
-### SET SOURCE PATH (todo: deprecate)
-set(CONFIGURE_SRC_PATH_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/cmake_source_dir.h.in")
-message(STATUS "CONFIGURE_SRC_PATH_TEMPLATE at ${CMAKE_CURRENT_SOURCE_DIR}/cmake_source_dir.h.in")
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    ### SET SOURCE PATH TO . (note: glsl files must be copied manully)
+    set(CONFIGURE_SRC_PATH_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/cmake_source_dir_dummy.h.in")
+    message(STATUS "CONFIGURE_SRC_PATH_TEMPLATE at ${CMAKE_CURRENT_SOURCE_DIR}/cmake_source_dir_dummy.h.in")
+else()
+    ### SET EMPTY PATH (todo: deprecate)
+    set(CONFIGURE_SRC_PATH_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/cmake_source_dir.h.in")
+    message(STATUS "CONFIGURE_SRC_PATH_TEMPLATE at ${CMAKE_CURRENT_SOURCE_DIR}/cmake_source_dir.h.in")
+endif()
 
 ### GLOBAL CONFIGURATIONS
 # project libraries

@@ -5,24 +5,32 @@
 
 namespace algo
 {
+
     static Shader functor[4];
 
     void reload_subroutines()
     {
-        functor[0].reload_shader_program_from_files(FP("algo/ode45.glsl"));
-        functor[1].reload_shader_program_from_files(FP("algo/ks.glsl"));
+        functor[0].reload_shader_program_from_files(FP("algo/double_gyre.glsl"));
+        functor[1].reload_shader_program_from_files(FP("algo/double_gyre3d.glsl"));
+        functor[2].reload_shader_program_from_files(FP("algo/ks.glsl"));
+        functor[3].reload_shader_program_from_files(FP("algo/inertial.glsl"));
     };
 
-    void ode45(float t0, float t_end, const Vec4& y, uint option)
+    void ode45(simType T, float t0, float t_end, const Vec4& y, const Vec4& dydx)
     {
         // Bind arrays
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER,0,y.d_data); // rhs
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER,1,dydx.d_data); // rhs
 
         // Deploy kernel
-        functor[option].use();
-        functor[option].setFloat("t0",t0);
-        functor[option].setFloat("t_end",t_end);
-        functor[option].setFloat("tol",0.001f);
+        functor[T].use();
+
+        functor[T].setFloat("t0",t0);
+        functor[T].setFloat("t_end",t_end);
+        functor[T].setFloat("tol",0.001f);
+        functor[T].setFloat("tau_inv",1.0f/0.1f);
+        functor[T].setVec4("g",glm::vec4(0,-9.81f,0,0));
+
         glDispatchCompute(y.mesh->grid<0>(), y.mesh->grid<1>(), y.mesh->grid<2>());
 
         // make sure writing to image has finished before read
@@ -39,7 +47,7 @@ namespace algo
         float L = 10.0;
         float eta = L/91.0f; // 991: unstable when t > 5
         const uint nk = 64; // explicitly defined in kernels
-        float E0 = 0.032f;
+        float E0 = 3.2f;
         float lambda = 0.5;
 
         //float LI = L/3.0f;
@@ -47,8 +55,11 @@ namespace algo
 
         srand(777777);
 
-        std::vector<float> theta,alpha,k,E,dk,a,omega;
+        std::vector<float> theta,psi,alpha,k,E,dk,a,omega;
         for(uint i = 0; i < nk; i++){ theta.push_back(2*pi*((float)rand()/(float)RAND_MAX)); }
+        for(uint i = 0; i < nk; i++){ psi.push_back(2*pi*((float)rand()/(float)RAND_MAX)); }
+        // if 2D, let nz = 1 and psi = 0
+        //for(uint i = 0; i < nk; i++){ psi.push_back(0); }
 
         float k1 = 2*pi/L;
         //float k_Nk = 2*pi/eta;
@@ -80,21 +91,31 @@ namespace algo
         //An = (a.*[ cos(theta) -sin(theta)]).';
         //Bn = (b.*[-cos(theta)  sin(theta)]).';
         //Kn = (k.*[ sin(theta)  cos(theta)]).';
-        std::vector<float> a_st, a_ct, k_st, k_ct;
+        std::vector<float> a_xt, a_yt, a_zt, k_xt, k_yt, k_zt;
+        std::vector<float> b_xt, b_yt, b_zt;
         for(uint i = 0; i < nk; i++){
-            a_st.push_back(a[i]*sinf(theta[i]));
-            a_ct.push_back(a[i]*cosf(theta[i]));
-            k_st.push_back(k[i]*sinf(theta[i]));
-            k_ct.push_back(k[i]*cosf(theta[i]));
+            a_xt.push_back( a[i]*cosf(theta[i])*cosf(psi[i]) );
+            a_yt.push_back(-a[i]*sinf(theta[i]) );
+            a_zt.push_back( a[i]*cosf(theta[i])*sinf(psi[i]) );
+
+            b_xt.push_back(-a[i]*cosf(theta[i])*sinf(psi[i]) ); // -a_zt
+            b_yt.push_back( a[i]*sinf(theta[i]) ); // -a_yt
+            b_zt.push_back(-a[i]*cosf(theta[i])*cosf(psi[i]) ); // -a_xt
+
+            k_xt.push_back( k[i]*sinf(theta[i])*cosf(psi[i]) );
+            k_yt.push_back( k[i]*cosf(theta[i]) );
+            k_zt.push_back( k[i]*sinf(theta[i])*sinf(psi[i]) );
         }
 
         glBindBuffer(GL_UNIFORM_BUFFER, ubo);
-        glBufferData(GL_UNIFORM_BUFFER, 5*nk*sizeof(float) , NULL, GL_STATIC_DRAW);
-        glBufferSubData(GL_UNIFORM_BUFFER, 0*nk*sizeof(float), nk*sizeof(float), &a_st[0]);
-        glBufferSubData(GL_UNIFORM_BUFFER, 1*nk*sizeof(float), nk*sizeof(float), &a_ct[0]);
-        glBufferSubData(GL_UNIFORM_BUFFER, 2*nk*sizeof(float), nk*sizeof(float), &k_st[0]);
-        glBufferSubData(GL_UNIFORM_BUFFER, 3*nk*sizeof(float), nk*sizeof(float), &k_ct[0]);
-        glBufferSubData(GL_UNIFORM_BUFFER, 4*nk*sizeof(float), nk*sizeof(float), &omega[0]);
+        glBufferData(GL_UNIFORM_BUFFER, 7*nk*sizeof(float) , NULL, GL_STATIC_DRAW);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0*nk*sizeof(float), nk*sizeof(float), &a_xt[0]);
+        glBufferSubData(GL_UNIFORM_BUFFER, 1*nk*sizeof(float), nk*sizeof(float), &a_yt[0]);
+        glBufferSubData(GL_UNIFORM_BUFFER, 2*nk*sizeof(float), nk*sizeof(float), &a_zt[0]);
+        glBufferSubData(GL_UNIFORM_BUFFER, 3*nk*sizeof(float), nk*sizeof(float), &k_xt[0]);
+        glBufferSubData(GL_UNIFORM_BUFFER, 4*nk*sizeof(float), nk*sizeof(float), &k_yt[0]);
+        glBufferSubData(GL_UNIFORM_BUFFER, 5*nk*sizeof(float), nk*sizeof(float), &k_zt[0]);
+        glBufferSubData(GL_UNIFORM_BUFFER, 6*nk*sizeof(float), nk*sizeof(float), &omega[0]);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
         // binding to UBO0
         glBindBufferBase(GL_UNIFORM_BUFFER, 1, ubo); // Bind to UBO0
