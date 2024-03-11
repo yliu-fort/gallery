@@ -1,3 +1,6 @@
 [submodule "09_higher_dimension_fluid_solver"]
 	path = 09_higher_dimension_fluid_solver
 	url = https://github.com/yliu-fort/ADESolver.git
+[submodule "10_tree_based_topology_data_visualization"]
+	path = 10_tree_based_topology_data_visualization
+	url = https://github.com/yliu-fort/LodDemo
