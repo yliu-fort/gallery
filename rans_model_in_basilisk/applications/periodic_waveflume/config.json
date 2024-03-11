@@ -1,0 +1,37 @@
+{
+  "verbose":0,
+  
+  "t0": -20,
+  "tmax": 300,
+  "dtmax": 0.0025,
+   "size": [
+    -40.0,
+    40.0,
+    -0.8,
+    39.2
+  ],
+  "waterlevel": 0,
+  "waterdepth": 0.8,
+  "g": 9.81,
+  "rho1": 1025,
+  "rho2": 1.225,
+  "mu1": 0.00089,
+  "mu2": 1.74E-5,
+  "use_reynolds": true,
+  "re": 1000000,
+  "mu_ratio": 50,
+  "refine_init": 7,
+  "adapt_refine_max": 13,
+  "adapt_refine_min": 5,
+  "adapt_utol": 0.0005,
+
+  "ramptime": 0.0,
+  "cfl": 0.2,
+  "cfl_ramptime": 0.0,
+  "drift_velocity": 0,
+
+  "k0": 1E-4,
+  "omega0": 421.0,
+
+  "phase_shift": 0.0
+}

@@ -1,0 +1,74 @@
+CJSON_DIR := $(BASILISK)/../thirdParty/cJSON-1.7.15
+
+CFLAGS += -O2 -DMONITOR -DTWO_PHASE -DNO_INLET -DRSM_INTERFACE_NO_DIFFUSION -I../src/ -I$(CJSON_DIR)
+LDFLAGS += -lm -lcjson -L$(CJSON_DIR)/build 
+LDFLAGS += -Wl,-rpath $(CJSON_DIR)/build
+INST_PATH := ./periodic_waveflume/
+ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+INST = $(shell sudo ln -sf $(ROOT_DIR)/bin/* /usr/local/bin/)
+UNINST = $(shell ls $(ROOT_DIR)/bin/* | xargs -n 1 find -L /usr/local/bin -samefile | xargs sudo rm -f )
+
+MPI_FLAG_LIST := seq mpi
+DIM_FLAG_LIST := 2d
+RSM_FLAG_LIST := laminar komega stress_omega
+
+SOURCE := main.c
+all:
+	make wclean 
+	@for mpi_flag in ${MPI_FLAG_LIST};          \
+	do                                      	\
+		for dim_flag in ${DIM_FLAG_LIST};       \
+		do                                  	\
+			for rsm_flag in ${RSM_FLAG_LIST};   \
+			do                                  \
+				if [ $$rsm_flag = "komega" ]; then\
+				eval RSM_FLAG=-DRSM_KOMEGA ; 	\
+				else \
+					if [ $$rsm_flag = "stress_omega" ]; then\
+					eval RSM_FLAG=-DRSM_STRESS_OMEGA ; \
+					else \
+					eval RSM_FLAG= ; \
+					fi; \
+				fi; \
+				if [ $$dim_flag = "3d" ]; then	\
+				eval DIM_FLAG=-grid=octree ; fi;\
+				eval EXE_NAME=$$mpi_flag.$$dim_flag.$$rsm_flag; \
+				if [ $$mpi_flag = "seq" ]; then	\
+				make RSM_FLAG=$$RSM_FLAG DIM_FLAG=$$DIM_FLAG seq ; 	\
+				mv -f seq $(INST_PATH)$$EXE_NAME 2>/dev/null ;		\
+				else 	\
+				make RSM_FLAG=$$RSM_FLAG DIM_FLAG=$$DIM_FLAG mpi ; 	\
+				mv -f mpi $(INST_PATH)$$EXE_NAME 2>/dev/null ;		\
+				fi 		\
+			done								\
+		done                                	\
+	done
+	rm -f _main.c
+
+test:
+	eval echo $(CFLAGS) $(RSM_FLAG)
+	
+seq: $(SOURCE)
+	rm -f _main.c
+	make clean
+	$(QCC) $(CFLAGS) $(RSM_FLAG) $(DIM_FLAG) -o $@ $^ $(LDFLAGS)
+
+mpi: $(SOURCE)
+	rm -f _main.c
+	make clean
+	$(QCC) -source $(CFLAGS) $(RSM_FLAG) $(DIM_FLAG) -D_MPI=1 $<
+	mpicc $(CFLAGS) $(RSM_FLAG) $(DIM_FLAG) -o $@ _main.c $(LDFLAGS)
+	
+winstall:
+	echo $(ROOT_DIR)
+	echo $(INST)
+
+wuninstall:
+	echo $(ROOT_DIR)
+	echo $(UNINST)
+
+wclean:
+	rm -f seq.* mpi.* *.exec _*.c rm -rf .qcc*
+	make clean
+
+include $(BASILISK)/Makefile.defs

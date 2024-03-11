@@ -1,0 +1,30 @@
+{
+  "verbose":0,
+  
+  "t0": 0,
+  "tmax": 130,
+   "size": [
+    3.79,
+    83.79,
+    -0.8,
+    79.2
+  ],
+  "waterlevel": 0,
+  "waterdepth": 0.8,
+  "g": 9.81,
+  "rho1": 1025,
+  "rho2": 1.225,
+  "mu1": 0.00089,
+  "mu2": 1.74E-5,
+  "refine_init": 7,
+  "adapt_refine_max": 11,
+  "adapt_refine_min": 5,
+  "adapt_utol": 0.002,
+
+  "ramptime": 1.0,
+  "cfl": 0.1,
+  "drift_velocity": 0,
+  
+  "k0": 1E-4,
+  "omega0": 421.0
+}

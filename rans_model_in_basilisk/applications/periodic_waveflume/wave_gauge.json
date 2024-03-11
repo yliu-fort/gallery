@@ -1,0 +1,9 @@
+{
+	"type" : "line_distributed",
+	"x0" : 0.000001,
+	"x1" : 0.999999,
+	"y0" : 0.6,
+	"z0" : 0.0,
+	"absolute_pos" : false,
+	"num_probes" : 4105
+}

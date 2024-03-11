@@ -1,0 +1,4 @@
+numpy
+plyfile
+mpi4py
+scipy
